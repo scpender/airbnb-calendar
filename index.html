@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Airbnb Calendar</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid #ddd;
+            background-color: #fff;
+            border-radius: 8px 8px 0 0;
+        }
+        .tab {
+            padding: 15px 25px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 16px;
+            color: #666;
+            transition: all 0.3s ease;
+            border-bottom: 3px solid transparent;
+        }
+        .tab:hover {
+            background-color: #f8f8f8;
+            color: #333;
+        }
+        .tab.active {
+            color: #FF5A5F;
+            border-bottom-color: #FF5A5F;
+            background-color: #fff;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .calendar-container {
+            height: 700px;
+        }
+        .property-title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .loading {
+            text-align: center;
+            padding: 50px;
+            color: #666;
+        }
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        }
+        .status {
+            background-color: #e8f5e8;
+            color: #2e7d32;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="tabs" id="tabs"></div>
+        <div id="status" class="status" style="display: none;"></div>
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="tab-contents"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.9/index.global.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ical.js@1.5.0/build/ical.min.js"></script>
+    <script>
+        class AirbnbCalendar {
+            constructor() {
+                this.properties = [];
+                this.calendars = {};
+                this.localEvents = this.loadLocalEvents();
+                this.currentProperty = null;
+                this.init();
+            }
+
+            async init() {
+                try {
+                    await this.loadConfig();
+                    this.setupTabs();
+                    this.setupRouting();
+                    this.loadInitialTab();
+                } catch (error) {
+                    this.showError('Failed to initialize calendar: ' + error.message);
+                }
+            }
+
+            async loadConfig() {
+                const response = await fetch('./airbnb-config.json');
+                if (!response.ok) {
+                    throw new Error('Failed to load configuration');
+                }
+                const config = await response.json();
+                this.properties = config.properties;
+            }
+
+            setupTabs() {
+                const tabsContainer = document.getElementById('tabs');
+                const tabContentsContainer = document.getElementById('tab-contents');
+
+                this.properties.forEach((property, index) => {
+                    // Create tab
+                    const tab = document.createElement('button');
+                    tab.className = 'tab';
+                    tab.textContent = property.name;
+                    tab.dataset.property = index;
+                    tab.onclick = () => this.switchTab(index);
+                    tabsContainer.appendChild(tab);
+
+                    // Create tab content
+                    const content = document.createElement('div');
+                    content.className = 'tab-content';
+                    content.id = `tab-${index}`;
+                    content.innerHTML = `
+                        <div class="property-title">${property.name}</div>
+                        <div class="calendar-container" id="calendar-${index}"></div>
+                    `;
+                    tabContentsContainer.appendChild(content);
+                });
+            }
+
+            setupRouting() {
+                window.addEventListener('hashchange', () => {
+                    this.loadInitialTab();
+                });
+            }
+
+            loadInitialTab() {
+                const hash = window.location.hash.substring(1);
+                const propertyIndex = this.properties.findIndex(p => 
+                    p.name.toLowerCase().replace(/\s+/g, '-') === hash
+                );
+                
+                if (propertyIndex !== -1) {
+                    this.switchTab(propertyIndex);
+                } else {
+                    this.switchTab(0);
+                }
+            }
+
+            async switchTab(index) {
+                // Update tab appearance
+                document.querySelectorAll('.tab').forEach((tab, i) => {
+                    tab.classList.toggle('active', i === index);
+                });
+
+                // Update content visibility
+                document.querySelectorAll('.tab-content').forEach((content, i) => {
+                    content.classList.toggle('active', i === index);
+                });
+
+                // Update URL hash
+                const propertyName = this.properties[index].name.toLowerCase().replace(/\s+/g, '-');
+                window.location.hash = propertyName;
+
+                // Load calendar for this property
+                this.currentProperty = index;
+                await this.loadCalendar(index);
+            }
+
+            async loadCalendar(propertyIndex) {
+                const property = this.properties[propertyIndex];
+                const calendarEl = document.getElementById(`calendar-${propertyIndex}`);
+                
+                if (this.calendars[propertyIndex]) {
+                    return; // Calendar already loaded
+                }
+
+                this.showStatus('Loading calendar events...');
+
+                try {
+                    const events = await this.fetchAndMergeEvents(property);
+                    
+                    const calendar = new FullCalendar.Calendar(calendarEl, {
+                        initialView: 'dayGridMonth',
+                        height: 'auto',
+                        events: events,
+                        eventDisplay: 'block',
+                        eventDidMount: this.customizeEvent.bind(this),
+                        headerToolbar: {
+                            left: 'prev,next today',
+                            center: 'title',
+                            right: 'dayGridMonth,timeGridWeek,timeGridDay'
+                        },
+                        eventTimeFormat: {
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            omitZeroMinute: false
+                        }
+                    });
+
+                    calendar.render();
+                    this.calendars[propertyIndex] = calendar;
+                    this.hideStatus();
+                } catch (error) {
+                    this.showError(`Failed to load calendar for ${property.name}: ${error.message}`);
+                }
+            }
+
+            async fetchAndMergeEvents(property) {
+                const allEvents = [];
+                const sources = [
+                    { url: property.directUrl, source: 'Direct' },
+                    { url: property.airbnbUrl, source: 'Airbnb' }
+                ];
+
+                for (const source of sources) {
+                    try {
+                        const events = await this.fetchICalEvents(source.url, source.source);
+                        allEvents.push(...events);
+                    } catch (error) {
+                        console.warn(`Failed to fetch ${source.source} events:`, error);
+                    }
+                }
+
+                // Merge with locally stored events
+                const localEvents = this.localEvents[property.name] || [];
+                allEvents.push(...localEvents);
+
+                // Update local storage with new events
+                this.updateLocalEvents(property.name, allEvents);
+
+                return allEvents;
+            }
+
+            async fetchICalEvents(url, source) {
+                const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
+                const response = await fetch(proxyUrl);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                const icalData = await response.text();
+                return this.parseICalEvents(icalData, source);
+            }
+
+            parseICalEvents(icalData, source) {
+                const jcalData = ICAL.parse(icalData);
+                const comp = new ICAL.Component(jcalData);
+                const events = [];
+
+                const vevents = comp.getAllSubcomponents('vevent');
+                
+                vevents.forEach(vevent => {
+                    const event = new ICAL.Event(vevent);
+                    const summary = event.summary;
+                    
+                    // Filter out partial phone numbers
+                    if (this.containsPartialPhoneNumber(summary)) {
+                        return;
+                    }
+
+                    const startDate = event.startDate.toJSDate();
+                    const endDate = event.endDate.toJSDate();
+                    
+                    const calendarEvent = {
+                        id: event.uid,
+                        title: summary,
+                        start: startDate,
+                        end: endDate,
+                        allDay: event.startDate.isDate,
+                        source: source,
+                        description: event.description || '',
+                        location: event.location || ''
+                    };
+
+                    // Handle multi-day events
+                    if (!calendarEvent.allDay && this.isMultiDayEvent(startDate, endDate)) {
+                        calendarEvent.display = 'block';
+                        calendarEvent.className = 'multi-day-event';
+                    }
+
+                    events.push(calendarEvent);
+                });
+
+                return events;
+            }
+
+            containsPartialPhoneNumber(text) {
+                // Look for patterns like "...1234" or "***1234" indicating partial phone numbers
+                const patterns = [
+                    /\.\.\.\d{4}/,
+                    /\*\*\*\d{4}/,
+                    /xxx\d{4}/i,
+                    /\d{3}-\*\*\*\*$/
+                ];
+                
+                return patterns.some(pattern => pattern.test(text));
+            }
+
+            isMultiDayEvent(start, end) {
+                const startDay = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+                const endDay = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+                return endDay > startDay;
+            }
+
+            customizeEvent(info) {
+                const event = info.event;
+                const el = info.el;
+                
+                // Add source indicator
+                const sourceIndicator = document.createElement('div');
+                sourceIndicator.className = 'event-source';
+                sourceIndicator.textContent = event.extendedProps.source;
+                sourceIndicator.style.cssText = `
+                    font-size: 10px;
+                    opacity: 0.7;
+                    margin-top: 2px;
+                `;
+                el.appendChild(sourceIndicator);
+
+                // Style based on source
+                if (event.extendedProps.source === 'Airbnb') {
+                    el.style.backgroundColor = '#FF5A5F';
+                    el.style.borderColor = '#FF5A5F';
+                } else {
+                    el.style.backgroundColor = '#4285f4';
+                    el.style.borderColor = '#4285f4';
+                }
+            }
+
+            loadLocalEvents() {
+                const stored = localStorage.getItem('airbnb-calendar-events');
+                return stored ? JSON.parse(stored) : {};
+            }
+
+            saveLocalEvents() {
+                localStorage.setItem('airbnb-calendar-events', JSON.stringify(this.localEvents));
+            }
+
+            updateLocalEvents(propertyName, newEvents) {
+                if (!this.localEvents[propertyName]) {
+                    this.localEvents[propertyName] = [];
+                }
+
+                // Update existing events or add new ones
+                const existingIds = new Set(this.localEvents[propertyName].map(e => e.id));
+                
+                newEvents.forEach(event => {
+                    if (!existingIds.has(event.id)) {
+                        this.localEvents[propertyName].push(event);
+                    } else {
+                        // Update existing event
+                        const index = this.localEvents[propertyName].findIndex(e => e.id === event.id);
+                        if (index !== -1) {
+                            this.localEvents[propertyName][index] = event;
+                        }
+                    }
+                });
+
+                this.saveLocalEvents();
+            }
+
+            showStatus(message) {
+                const statusEl = document.getElementById('status');
+                statusEl.textContent = message;
+                statusEl.style.display = 'block';
+                this.hideError();
+            }
+
+            hideStatus() {
+                document.getElementById('status').style.display = 'none';
+            }
+
+            showError(message) {
+                const errorEl = document.getElementById('error');
+                errorEl.textContent = message;
+                errorEl.style.display = 'block';
+                this.hideStatus();
+            }
+
+            hideError() {
+                document.getElementById('error').style.display = 'none';
+            }
+        }
+
+        // Initialize the calendar when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new AirbnbCalendar();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,19 @@
+{
+  "properties": [
+    {
+      "name": "Downtown Loft",
+      "directUrl": "https://calendar.google.com/calendar/ical/example1%40gmail.com/public/basic.ics",
+      "airbnbUrl": "https://www.airbnb.com/calendar/ical/12345678.ics"
+    },
+    {
+      "name": "Beach House",
+      "directUrl": "https://calendar.google.com/calendar/ical/example2%40gmail.com/public/basic.ics",
+      "airbnbUrl": "https://www.airbnb.com/calendar/ical/87654321.ics"
+    },
+    {
+      "name": "Mountain Cabin",
+      "directUrl": "https://calendar.google.com/calendar/ical/example3%40gmail.com/public/basic.ics",
+      "airbnbUrl": "https://www.airbnb.com/calendar/ical/11223344.ics"
+    }
+  ]
+}
