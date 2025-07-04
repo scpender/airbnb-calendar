@@ -239,16 +239,35 @@
 
                 for (const source of sources) {
                     try {
+                        console.log(`Fetching ${source.source} events from:`, source.url);
                         const events = await this.fetchICalEvents(source.url, source.source);
+                        console.log(`Found ${events.length} events from ${source.source}`);
                         allEvents.push(...events);
                     } catch (error) {
-                        console.warn(`Failed to fetch ${source.source} events:`, error);
+                        console.error(`Failed to fetch ${source.source} events:`, error);
+                        this.showStatus(`Warning: Could not load ${source.source} events - ${error.message}`);
                     }
                 }
 
                 // Merge with locally stored events
                 const localEvents = this.localEvents[property.name] || [];
                 allEvents.push(...localEvents);
+
+                // Add some test events if no events are found
+                if (allEvents.length === 0) {
+                    const testEvents = [
+                        {
+                            id: 'test-1',
+                            title: 'Test Booking (loading...)',
+                            start: new Date(),
+                            end: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+                            allDay: true,
+                            source: 'Test',
+                            description: 'This is a test event while loading real data'
+                        }
+                    ];
+                    allEvents.push(...testEvents);
+                }
 
                 // Update local storage with new events
                 this.updateLocalEvents(property.name, allEvents);
@@ -257,15 +276,40 @@
             }
 
             async fetchICalEvents(url, source) {
-                const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
-                const response = await fetch(proxyUrl);
+                // Try different CORS proxy services
+                const proxyUrls = [
+                    `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
+                    `https://corsproxy.io/?${encodeURIComponent(url)}`,
+                    `https://cors-anywhere.herokuapp.com/${url}`
+                ];
                 
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
+                let lastError = null;
+                
+                for (const proxyUrl of proxyUrls) {
+                    try {
+                        const response = await fetch(proxyUrl);
+                        
+                        if (!response.ok) {
+                            throw new Error(`HTTP ${response.status}`);
+                        }
+                        
+                        let icalData;
+                        if (proxyUrl.includes('allorigins.win')) {
+                            const json = await response.json();
+                            icalData = json.contents;
+                        } else {
+                            icalData = await response.text();
+                        }
+                        
+                        return this.parseICalEvents(icalData, source);
+                    } catch (error) {
+                        lastError = error;
+                        console.warn(`Failed to fetch from proxy: ${proxyUrl}`, error);
+                        continue;
+                    }
                 }
                 
-                const icalData = await response.text();
-                return this.parseICalEvents(icalData, source);
+                throw new Error(`All proxy attempts failed. Last error: ${lastError.message}`);
             }
 
             parseICalEvents(icalData, source) {
