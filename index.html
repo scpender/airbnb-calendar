@@ -253,20 +253,9 @@
                 const localEvents = this.localEvents[property.name] || [];
                 allEvents.push(...localEvents);
 
-                // Add some test events if no events are found
+                // Show message if no events are found
                 if (allEvents.length === 0) {
-                    const testEvents = [
-                        {
-                            id: 'test-1',
-                            title: 'Test Booking (loading...)',
-                            start: new Date(),
-                            end: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-                            allDay: true,
-                            source: 'Test',
-                            description: 'This is a test event while loading real data'
-                        }
-                    ];
-                    allEvents.push(...testEvents);
+                    console.log('No events found for this property');
                 }
 
                 // Update local storage with new events
@@ -328,22 +317,34 @@
                         return;
                     }
 
-                    const startDate = event.startDate.toJSDate();
-                    const endDate = event.endDate.toJSDate();
+                    let startDate = event.startDate.toJSDate();
+                    let endDate = event.endDate.toJSDate();
+                    
+                    // For multi-day events, adjust times to show as partial days
+                    // Start at 3pm (15:00) and end at 11am (11:00) next day
+                    if (event.startDate.isDate && this.isMultiDayEvent(startDate, endDate)) {
+                        // Set start time to 3pm on start date
+                        startDate = new Date(startDate);
+                        startDate.setHours(15, 0, 0, 0);
+                        
+                        // Set end time to 11am on end date
+                        endDate = new Date(endDate);
+                        endDate.setHours(11, 0, 0, 0);
+                    }
                     
                     const calendarEvent = {
                         id: event.uid,
                         title: summary,
                         start: startDate,
                         end: endDate,
-                        allDay: event.startDate.isDate,
+                        allDay: false, // Always show as timed events to display partial days
                         source: source,
                         description: event.description || '',
                         location: event.location || ''
                     };
 
-                    // Handle multi-day events
-                    if (!calendarEvent.allDay && this.isMultiDayEvent(startDate, endDate)) {
+                    // Handle multi-day events display
+                    if (this.isMultiDayEvent(startDate, endDate)) {
                         calendarEvent.display = 'block';
                         calendarEvent.className = 'multi-day-event';
                     }
@@ -399,7 +400,24 @@
 
             loadLocalEvents() {
                 const stored = localStorage.getItem('airbnb-calendar-events');
-                return stored ? JSON.parse(stored) : {};
+                const events = stored ? JSON.parse(stored) : {};
+                
+                // Clean up duplicates in stored events
+                Object.keys(events).forEach(propertyName => {
+                    const uniqueEvents = [];
+                    const seenIds = new Set();
+                    
+                    events[propertyName].forEach(event => {
+                        if (!seenIds.has(event.id)) {
+                            uniqueEvents.push(event);
+                            seenIds.add(event.id);
+                        }
+                    });
+                    
+                    events[propertyName] = uniqueEvents;
+                });
+                
+                return events;
             }
 
             saveLocalEvents() {
@@ -411,21 +429,27 @@
                     this.localEvents[propertyName] = [];
                 }
 
-                // Update existing events or add new ones
-                const existingIds = new Set(this.localEvents[propertyName].map(e => e.id));
+                // Remove duplicates and update existing events
+                const uniqueEvents = [];
+                const seenIds = new Set();
                 
+                // First add new events, avoiding duplicates
                 newEvents.forEach(event => {
-                    if (!existingIds.has(event.id)) {
-                        this.localEvents[propertyName].push(event);
-                    } else {
-                        // Update existing event
-                        const index = this.localEvents[propertyName].findIndex(e => e.id === event.id);
-                        if (index !== -1) {
-                            this.localEvents[propertyName][index] = event;
-                        }
+                    if (!seenIds.has(event.id)) {
+                        uniqueEvents.push(event);
+                        seenIds.add(event.id);
+                    }
+                });
+                
+                // Then add existing local events that aren't already included
+                this.localEvents[propertyName].forEach(event => {
+                    if (!seenIds.has(event.id)) {
+                        uniqueEvents.push(event);
+                        seenIds.add(event.id);
                     }
                 });
 
+                this.localEvents[propertyName] = uniqueEvents;
                 this.saveLocalEvents();
             }
 
