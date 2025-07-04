@@ -227,10 +227,15 @@
 
             async fetchAndMergeEvents(property) {
                 const allEvents = [];
-                const sources = [
-                    { url: property.directUrl, source: 'Direct' },
-                    { url: property.airbnbUrl, source: 'Airbnb' }
-                ];
+                const sources = [];
+                
+                // Only add sources that have URLs
+                if (property.directUrl && property.directUrl.trim() !== '') {
+                    sources.push({ url: property.directUrl, source: 'Direct' });
+                }
+                if (property.airbnbUrl && property.airbnbUrl.trim() !== '') {
+                    sources.push({ url: property.airbnbUrl, source: 'Airbnb' });
+                }
 
                 for (const source of sources) {
                     try {
