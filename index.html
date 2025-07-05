@@ -207,6 +207,31 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             transition: all 0.2s ease;
         }
+        
+        /* Not available day styling */
+        .fc-daygrid-day.not-available {
+            background-color: #f5f5f5 !important;
+            position: relative;
+        }
+        
+        .fc-daygrid-day.not-available::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, 
+                rgba(0,0,0,0.05) 0%, 
+                rgba(0,0,0,0.02) 50%, 
+                rgba(0,0,0,0.05) 100%);
+            pointer-events: none;
+        }
+        
+        .fc-daygrid-day.not-available .fc-daygrid-day-number {
+            color: #999 !important;
+            opacity: 0.7;
+        }
     </style>
 </head>
 <body>
@@ -591,8 +616,11 @@
 
 
             addProportionalOverlays(events) {
-                // Clear existing overlays
+                // Clear existing overlays and styling
                 document.querySelectorAll('.partial-day-overlay').forEach(el => el.remove());
+                document.querySelectorAll('.fc-daygrid-day.not-available').forEach(el => {
+                    el.classList.remove('not-available');
+                });
                 
                 const calendar = this.calendars[this.currentProperty];
                 if (!calendar) return;
@@ -612,12 +640,52 @@
                         const dayEl = calendar.el.querySelector(`[data-date="${dayStr}"]`);
                         
                         if (dayEl) {
+                            // Mark day as not available if it's a booking (not just blocked time)
+                            if (this.isBookingEvent(event.title)) {
+                                dayEl.classList.add('not-available');
+                            }
+                            
                             this.createDayOverlay(dayEl, event, new Date(currentDay), eventStart, eventEnd);
                         }
                         
                         currentDay.setDate(currentDay.getDate() + 1);
                     }
                 });
+            }
+            
+            cleanEventTitle(title) {
+                // Remove common time patterns and guest info
+                let cleaned = title
+                    // Remove check-in/check-out times
+                    .replace(/\b\d{1,2}:\d{2}\s*(AM|PM|am|pm)\b/g, '')
+                    // Remove date patterns
+                    .replace(/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b/g, '')
+                    // Remove guest numbers
+                    .replace(/\b\d+\s*(guest|guests)\b/gi, '')
+                    // Remove extra whitespace and dashes
+                    .replace(/\s*[-–—]\s*/g, ' - ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                
+                // Remove leading/trailing dashes
+                cleaned = cleaned.replace(/^[-\s]+|[-\s]+$/g, '');
+                
+                return cleaned || 'Booking';
+            }
+            
+            isBookingEvent(title) {
+                // Check if this is an actual booking vs just a blocked time
+                const bookingIndicators = [
+                    'reserved', 'booked', 'guest', 'check', 'airbnb', 'booking',
+                    'stay', 'arrival', 'departure', 'confirmed'
+                ];
+                
+                const lowerTitle = title.toLowerCase();
+                return bookingIndicators.some(indicator => lowerTitle.includes(indicator)) ||
+                       // If title has guest info or looks like a booking
+                       /\d+\s*(guest|guests)/i.test(title) ||
+                       // If title is not just "Not available" or similar
+                       !/^(not\s*available|blocked|unavailable)$/i.test(title.trim());
             }
             
             createDayOverlay(dayEl, event, dayDate, eventStart, eventEnd) {
@@ -656,17 +724,20 @@
                     hour12: true 
                 });
                 
+                // Clean event title - remove times and guest info
+                const cleanTitle = this.cleanEventTitle(event.title);
+                
                 overlay.innerHTML = `
-                    <span class="overlay-title">${event.title}</span>
-                    <span class="overlay-time">${timeStr} (${duration.toFixed(1)}h)</span>
+                    <span class="overlay-title">${cleanTitle}</span>
                 `;
                 
-                // Add tooltip
-                overlay.title = `${event.title}\n${timeStr} - ${actualEnd.toLocaleTimeString('en-US', { 
+                // Add tooltip with detailed info
+                const endTimeStr = actualEnd.toLocaleTimeString('en-US', { 
                     hour: 'numeric', 
                     minute: '2-digit', 
                     hour12: true 
-                })}\nDuration: ${duration.toFixed(1)} hours`;
+                });
+                overlay.title = `${cleanTitle}\n${timeStr} - ${endTimeStr}\nDuration: ${duration.toFixed(1)} hours`;
                 
                 dayEl.appendChild(overlay);
             }
