@@ -245,11 +245,6 @@
         <div class="tabs" id="tabs"></div>
         <div id="status" class="status" style="display: none;"></div>
         <div id="error" class="error" style="display: none;"></div>
-        <div id="github-token-setup" class="status" style="display: none;">
-            <strong>GitHub Token Required:</strong> For persistent storage, please provide a GitHub Personal Access Token with repo access.
-            <input type="password" id="github-token-input" placeholder="Enter GitHub token..." style="margin: 0 10px; padding: 5px;">
-            <button onclick="window.calendar.setGithubToken(document.getElementById('github-token-input').value)">Save Token</button>
-        </div>
         <div id="tab-contents"></div>
     </div>
 
@@ -260,30 +255,15 @@
             constructor() {
                 this.properties = [];
                 this.calendars = {};
-                this.serverEvents = {};
-                this.propertyEvents = {};
                 this.currentProperty = null;
-                this.storageUrl = './storage/events.json';
-                this.githubToken = localStorage.getItem('github-token'); // Load from localStorage
                 
                 this.init();
             }
 
-            setGithubToken(token) {
-                this.githubToken = token;
-                localStorage.setItem('github-token', token);
-                document.getElementById('github-token-setup').style.display = 'none';
-                this.showStatus('GitHub token saved. Storage updates will now be persistent.');
-            }
-
-            showTokenSetup() {
-                document.getElementById('github-token-setup').style.display = 'block';
-            }
 
             async init() {
                 try {
                     await this.loadConfig();
-                    await this.loadServerEvents();
                     this.setupTabs();
                     this.setupRouting();
                     this.loadInitialTab();
@@ -437,24 +417,13 @@
                     }
                 }
 
-                // Merge with server stored events (only past events)
-                const serverEvents = this.serverEvents[property.name] || [];
-                const pastServerEvents = serverEvents.filter(event => {
-                    const eventDate = new Date(event.start);
-                    return eventDate < new Date();
-                });
-                allEvents.push(...pastServerEvents);
-
-                // Remove duplicates from the combined events
+                // Remove duplicates from the events
                 const uniqueEvents = this.removeDuplicateEvents(allEvents);
 
                 // Show message if no events are found
                 if (uniqueEvents.length === 0) {
                     console.log('No events found for this property');
                 }
-
-                // Update server storage with new events
-                await this.updateServerEvents(property.name, uniqueEvents);
 
                 return uniqueEvents;
             }
@@ -763,116 +732,6 @@
                 dayEl.appendChild(overlay);
             }
 
-            async loadServerEvents() {
-                try {
-                    const response = await fetch(this.storageUrl);
-                    if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}`);
-                    }
-                    const data = await response.json();
-                    
-                    // Convert server format to internal format
-                    this.serverEvents = {};
-                    Object.keys(data.properties).forEach(propertyName => {
-                        this.serverEvents[propertyName] = data.properties[propertyName].events || [];
-                    });
-                    
-                    console.log('Loaded server events:', this.serverEvents);
-                } catch (error) {
-                    console.warn('Failed to load server events, using empty state:', error);
-                    this.serverEvents = {};
-                }
-            }
-
-            async saveServerEvents() {
-                if (!this.githubToken) {
-                    console.warn('No GitHub token available, showing setup');
-                    this.showTokenSetup();
-                    // Fallback to localStorage for now
-                    localStorage.setItem('airbnb-calendar-events-backup', JSON.stringify(this.serverEvents));
-                    return;
-                }
-                
-                try {
-                    const data = {
-                        lastUpdated: new Date().toISOString(),
-                        properties: {}
-                    };
-                    
-                    // Convert internal format to server format
-                    Object.keys(this.serverEvents).forEach(propertyName => {
-                        data.properties[propertyName] = {
-                            events: this.serverEvents[propertyName]
-                        };
-                    });
-                    
-                    // For GitHub Pages, we need to update the file via GitHub API
-                    const response = await fetch(`https://api.github.com/repos/scpender/airbnb-calendar/contents/storage/events.json`, {
-                        method: 'PUT',
-                        headers: {
-                            'Authorization': `token ${this.githubToken}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            message: 'Update calendar events storage',
-                            content: btoa(JSON.stringify(data, null, 2)),
-                            sha: await this.getFileSha('storage/events.json')
-                        })
-                    });
-                    
-                    if (!response.ok) {
-                        throw new Error(`Failed to save: ${response.status}`);
-                    }
-                    
-                    console.log('Successfully saved server events');
-                } catch (error) {
-                    console.error('Failed to save server events:', error);
-                    // Fallback to localStorage for now
-                    localStorage.setItem('airbnb-calendar-events-backup', JSON.stringify(this.serverEvents));
-                }
-            }
-
-            async getFileSha(path) {
-                try {
-                    const response = await fetch(`https://api.github.com/repos/scpender/airbnb-calendar/contents/${path}`);
-                    if (response.ok) {
-                        const data = await response.json();
-                        return data.sha;
-                    }
-                } catch (error) {
-                    console.warn('Could not get file SHA:', error);
-                }
-                return null;
-            }
-
-            async updateServerEvents(propertyName, newEvents) {
-                if (!this.serverEvents[propertyName]) {
-                    this.serverEvents[propertyName] = [];
-                }
-
-                // Remove duplicates and update existing events
-                const uniqueEvents = [];
-                const seenIds = new Set();
-                
-                // First add new events, avoiding duplicates
-                newEvents.forEach(event => {
-                    if (!seenIds.has(event.id)) {
-                        uniqueEvents.push(event);
-                        seenIds.add(event.id);
-                    }
-                });
-                
-                // Then add existing server events that aren't already included
-                this.serverEvents[propertyName].forEach(event => {
-                    if (!seenIds.has(event.id)) {
-                        uniqueEvents.push(event);
-                        seenIds.add(event.id);
-                    }
-                });
-
-                this.serverEvents[propertyName] = uniqueEvents;
-                await this.saveServerEvents();
-            }
 
             showStatus(message) {
                 const statusEl = document.getElementById('status');
