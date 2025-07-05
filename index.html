@@ -647,7 +647,7 @@
                         
                         if (dayEl) {
                             // Mark day as not available if it's a booking (not just blocked time)
-                            if (this.isBookingEvent(event.title)) {
+                            if (this.isBookingEvent(event.title, event.extendedProps.source)) {
                                 dayEl.classList.add('not-available');
                             }
                             
@@ -679,21 +679,27 @@
                 return cleaned || 'Booking';
             }
             
-            isBookingEvent(title) {
-                // Be very conservative - only mark as booking if it explicitly contains guest info
+            isBookingEvent(title, source) {
+                // For Airbnb events, most are actual bookings so default to grey
+                // unless they're clearly just blocked time
+                if (source === 'Airbnb') {
+                    const isBlockedTime = /^(not\s*available|blocked|unavailable|maintenance|cleaning)$/i.test(title.trim());
+                    return !isBlockedTime; // Grey unless it's blocked time
+                }
+                
+                // For direct calendar events, only grey if clearly a booking
                 const hasGuestCount = /\d+\s*(guest|guests|person|people)/i.test(title);
                 const hasReservationTerms = /(reservation|booked|confirmed)/i.test(title);
                 
-                // Only turn grey for events that clearly indicate guest bookings
                 return hasGuestCount || hasReservationTerms;
             }
             
             createDayOverlay(dayEl, event, dayDate, eventStart, eventEnd) {
                 const overlay = document.createElement('div');
-                const isNotAvailable = this.isBookingEvent(event.title);
+                const isNotAvailable = this.isBookingEvent(event.title, event.extendedProps.source);
                 
                 // Debug logging
-                console.log(`Event: "${event.title}" -> isBooking: ${isNotAvailable}`);
+                console.log(`Event: "${event.title}" (${event.extendedProps.source}) -> isBooking: ${isNotAvailable}`);
                 
                 // Set base classes - default to source color, only grey for confirmed bookings
                 let overlayClasses = 'partial-day-overlay';
