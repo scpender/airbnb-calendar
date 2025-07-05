@@ -680,25 +680,22 @@
             }
             
             isBookingEvent(title) {
-                // Check if this is an actual booking vs just a blocked time
-                const bookingIndicators = [
-                    'reserved', 'booked', 'guest', 'check', 'airbnb', 'booking',
-                    'stay', 'arrival', 'departure', 'confirmed'
-                ];
+                // Be very conservative - only mark as booking if it explicitly contains guest info
+                const hasGuestCount = /\d+\s*(guest|guests|person|people)/i.test(title);
+                const hasReservationTerms = /(reservation|booked|confirmed)/i.test(title);
                 
-                const lowerTitle = title.toLowerCase();
-                return bookingIndicators.some(indicator => lowerTitle.includes(indicator)) ||
-                       // If title has guest info or looks like a booking
-                       /\d+\s*(guest|guests)/i.test(title) ||
-                       // If title is not just "Not available" or similar
-                       !/^(not\s*available|blocked|unavailable)$/i.test(title.trim());
+                // Only turn grey for events that clearly indicate guest bookings
+                return hasGuestCount || hasReservationTerms;
             }
             
             createDayOverlay(dayEl, event, dayDate, eventStart, eventEnd) {
                 const overlay = document.createElement('div');
                 const isNotAvailable = this.isBookingEvent(event.title);
                 
-                // Set base classes
+                // Debug logging
+                console.log(`Event: "${event.title}" -> isBooking: ${isNotAvailable}`);
+                
+                // Set base classes - default to source color, only grey for confirmed bookings
                 let overlayClasses = 'partial-day-overlay';
                 if (isNotAvailable) {
                     overlayClasses += ' not-available';
