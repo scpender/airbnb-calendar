@@ -680,14 +680,25 @@
             }
             
             isBookingEvent(title, source) {
+                const lowerTitle = title.toLowerCase().trim();
+                
+                // Explicitly exclude blocked/not available entries
+                if (/not\s*available|blocked|unavailable|maintenance|cleaning/i.test(lowerTitle)) {
+                    return false;
+                }
+                
+                // Exclude generic "reserved" without guest info
+                if (/^reserved$/i.test(lowerTitle)) {
+                    return false;
+                }
+                
                 // Only mark as grey if it clearly indicates an actual guest booking
-                // regardless of source
                 const hasGuestCount = /\d+\s*(guest|guests|person|people)/i.test(title);
                 const hasGuestName = /^[A-Z][a-z]+(\s+[A-Z][a-z]*)+$/i.test(title.trim()); // Looks like "John Smith"
-                const hasReservationTerms = /(reservation|confirmed|booking)/i.test(title);
+                const hasConfirmedReservation = /(confirmed\s+reservation|guest\s+reservation)/i.test(title);
                 
-                // Only turn grey for clear bookings
-                return hasGuestCount || hasGuestName || hasReservationTerms;
+                // Only turn grey for clear bookings with actual guest information
+                return hasGuestCount || hasGuestName || hasConfirmedReservation;
             }
             
             createDayOverlay(dayEl, event, dayDate, eventStart, eventEnd) {
