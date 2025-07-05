@@ -646,8 +646,8 @@
                         const dayEl = calendar.el.querySelector(`[data-date="${dayStr}"]`);
                         
                         if (dayEl) {
-                            // Mark day as not available if it's a booking (not just blocked time)
-                            if (this.isBookingEvent(event.title, event.extendedProps.source)) {
+                            // Mark day as not available if it's NOT a booking (blocked time)
+                            if (!this.isBookingEvent(event.title, event.extendedProps.source)) {
                                 dayEl.classList.add('not-available');
                             }
                             
@@ -708,11 +708,13 @@
                 // Debug logging
                 console.log(`Event: "${event.title}" (${event.extendedProps.source}) -> isBooking: ${isNotAvailable}`);
                 
-                // Set base classes - default to source color, only grey for confirmed bookings
+                // Set base classes - grey for NOT bookings (blocked time), source color for actual bookings
                 let overlayClasses = 'partial-day-overlay';
-                if (isNotAvailable) {
+                if (!isNotAvailable) {
+                    // Not a booking = grey (blocked/not available time)
                     overlayClasses += ' not-available';
                 } else {
+                    // Is a booking = source color (red for Airbnb, blue for Direct)
                     overlayClasses += ` ${event.extendedProps.source.toLowerCase()}-source`;
                 }
                 overlay.className = overlayClasses;
