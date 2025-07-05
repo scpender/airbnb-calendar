@@ -124,46 +124,88 @@
             margin-bottom: 1px;
         }
         
-        /* Proportional event styling */
-        .fc-daygrid-event.partial-day {
-            min-width: 10%;
-            max-width: 100%;
-            position: relative;
-            display: flex;
-            align-items: center;
-        }
-        
-        .fc-daygrid-event.partial-day::after {
-            content: '';
-            position: absolute;
-            right: -2px;
-            top: 0;
-            bottom: 0;
-            width: 2px;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 0 3px 3px 0;
-        }
-        
-        .fc-event-time {
-            font-size: 9px;
-            opacity: 0.7;
-            font-weight: normal;
-            white-space: nowrap;
-        }
-        
+        /* Proportional event styling with overlay approach */
         .fc-daygrid-day {
             position: relative;
         }
         
         .fc-daygrid-day-events {
-            margin-top: 2px;
+            position: relative;
+            z-index: 2;
         }
         
-        /* Better spacing for partial events */
-        .fc-daygrid-event-harness.partial-day {
+        .partial-day-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            z-index: 1;
+            border-radius: 3px;
             display: flex;
-            justify-content: flex-start;
-            align-items: stretch;
+            align-items: center;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: 500;
+            color: white;
+            text-shadow: 0 1px 1px rgba(0,0,0,0.3);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+        
+        .partial-day-overlay.airbnb-source {
+            background: linear-gradient(135deg, #FF5A5F 0%, #E6474D 100%);
+            border-left: 3px solid #CC3A3F;
+        }
+        
+        .partial-day-overlay.direct-source {
+            background: linear-gradient(135deg, #4285f4 0%, #3367d6 100%);
+            border-left: 3px solid #2c5aa0;
+        }
+        
+        .partial-day-overlay::after {
+            content: '';
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, 
+                rgba(255,255,255,0.5) 0%, 
+                transparent 50%, 
+                rgba(0,0,0,0.2) 100%);
+        }
+        
+        .fc-daygrid-event {
+            display: none; /* Hide default events, use overlay instead */
+        }
+        
+        .fc-event-time {
+            font-size: 9px;
+            opacity: 0.9;
+            font-weight: normal;
+            margin-left: 4px;
+        }
+        
+        .overlay-title {
+            font-weight: 600;
+            display: block;
+            line-height: 1.2;
+        }
+        
+        .overlay-time {
+            font-size: 9px;
+            opacity: 0.9;
+            font-weight: normal;
+            display: block;
+            margin-top: 1px;
+        }
+        
+        .partial-day-overlay:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            transition: all 0.2s ease;
         }
     </style>
 </head>
@@ -188,6 +230,7 @@
                 this.properties = [];
                 this.calendars = {};
                 this.serverEvents = {};
+                this.propertyEvents = {};
                 this.currentProperty = null;
                 this.storageUrl = './storage/events.json';
                 this.githubToken = localStorage.getItem('github-token'); // Load from localStorage
@@ -289,6 +332,11 @@
                 // Load calendar for this property
                 this.currentProperty = index;
                 await this.loadCalendar(index);
+                
+                // Refresh overlays if calendar already exists
+                if (this.calendars[index] && this.propertyEvents[index]) {
+                    setTimeout(() => this.addProportionalOverlays(this.propertyEvents[index]), 100);
+                }
             }
 
             async loadCalendar(propertyIndex) {
@@ -307,27 +355,27 @@
                     const calendar = new FullCalendar.Calendar(calendarEl, {
                         initialView: 'dayGridMonth',
                         height: 'auto',
-                        events: events,
-                        eventDisplay: 'block',
-                        eventDidMount: this.customizeEvent.bind(this),
+                        events: [], // Start with no events, we'll add overlays instead
+                        eventDisplay: 'none',
                         dayMaxEvents: false,
-                        moreLinkClick: 'popover',
                         headerToolbar: {
                             left: 'prev,next today',
                             center: 'title',
                             right: 'dayGridMonth,timeGridWeek,timeGridDay'
                         },
-                        eventTimeFormat: {
-                            hour: 'numeric',
-                            minute: '2-digit',
-                            omitZeroMinute: false
-                        },
-                        dayCellContent: this.customizeDayCell.bind(this),
-                        eventContent: this.customizeEventContent.bind(this)
+                        datesSet: () => {
+                            // Add overlays after calendar renders
+                            setTimeout(() => this.addProportionalOverlays(events), 100);
+                        }
                     });
 
                     calendar.render();
                     this.calendars[propertyIndex] = calendar;
+                    
+                    // Store events for this property
+                    if (!this.propertyEvents) this.propertyEvents = {};
+                    this.propertyEvents[propertyIndex] = events;
+                    
                     this.hideStatus();
                 } catch (error) {
                     this.showError(`Failed to load calendar for ${property.name}: ${error.message}`);
@@ -541,75 +589,86 @@
                 return 100;
             }
 
-            customizeEvent(info) {
-                const event = info.event;
-                const el = info.el;
+
+            addProportionalOverlays(events) {
+                // Clear existing overlays
+                document.querySelectorAll('.partial-day-overlay').forEach(el => el.remove());
                 
-                // Add proportional fill for partial day events
-                if (event.extendedProps.isPartialDay) {
-                    const fillPercentage = event.extendedProps.fillPercentage;
-                    el.style.width = `${fillPercentage}%`;
-                    el.style.marginLeft = '0';
-                    el.style.marginRight = 'auto';
+                const calendar = this.calendars[this.currentProperty];
+                if (!calendar) return;
+                
+                events.forEach(event => {
+                    if (!event.extendedProps || !event.extendedProps.isPartialDay) return;
                     
-                    // Add visual indicator for partial fill
-                    if (fillPercentage < 100) {
-                        el.style.background = `linear-gradient(to right, 
-                            ${event.extendedProps.source === 'Airbnb' ? '#FF5A5F' : '#4285f4'} 0%, 
-                            ${event.extendedProps.source === 'Airbnb' ? '#FF5A5F' : '#4285f4'} 100%, 
-                            transparent 100%)`;
-                        el.style.borderRight = '2px dashed rgba(0,0,0,0.3)';
-                    }
-                }
-
-                // Style based on source
-                el.classList.add(event.extendedProps.source === 'Airbnb' ? 'airbnb-source' : 'direct-source');
-                
-                // Add time indicator for partial days
-                if (event.extendedProps.isPartialDay) {
-                    const timeSpan = document.createElement('span');
-                    timeSpan.className = 'event-time';
-                    timeSpan.textContent = event.start.toLocaleTimeString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true
-                    });
-                    timeSpan.style.cssText = `
-                        font-size: 10px;
-                        opacity: 0.8;
-                        font-weight: normal;
-                        margin-left: 4px;
-                    `;
+                    const eventStart = new Date(event.start);
+                    const eventEnd = new Date(event.end);
                     
-                    const titleEl = el.querySelector('.fc-event-title');
-                    if (titleEl) {
-                        titleEl.appendChild(timeSpan);
+                    // Find all days this event spans
+                    const currentDay = new Date(eventStart);
+                    currentDay.setHours(0, 0, 0, 0);
+                    
+                    while (currentDay <= eventEnd) {
+                        const dayStr = currentDay.toISOString().split('T')[0];
+                        const dayEl = calendar.el.querySelector(`[data-date="${dayStr}"]`);
+                        
+                        if (dayEl) {
+                            this.createDayOverlay(dayEl, event, new Date(currentDay), eventStart, eventEnd);
+                        }
+                        
+                        currentDay.setDate(currentDay.getDate() + 1);
                     }
-                }
+                });
             }
-
-            customizeDayCell(info) {
-                // Default day cell content
-                return { html: info.dayNumberText };
-            }
-
-            customizeEventContent(info) {
-                const event = info.event;
-                let html = `<div class="fc-event-main">`;
+            
+            createDayOverlay(dayEl, event, dayDate, eventStart, eventEnd) {
+                const overlay = document.createElement('div');
+                overlay.className = `partial-day-overlay ${event.extendedProps.source.toLowerCase()}-source`;
                 
-                if (event.extendedProps.isPartialDay) {
-                    const duration = (event.end - event.start) / (1000 * 60 * 60); // hours
-                    html += `<div class="fc-event-title">${event.title}</div>`;
-                    html += `<div class="fc-event-time" style="font-size: 10px; opacity: 0.8;">
-                        ${event.start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
-                        (${duration.toFixed(1)}h)
-                    </div>`;
-                } else {
-                    html += `<div class="fc-event-title">${event.title}</div>`;
-                }
+                // Calculate positioning and width for this specific day
+                const dayStart = new Date(dayDate);
+                dayStart.setHours(0, 0, 0, 0);
+                const dayEnd = new Date(dayDate);
+                dayEnd.setHours(23, 59, 59, 999);
                 
-                html += `</div>`;
-                return { html: html };
+                // Determine actual start and end times for this day
+                const actualStart = new Date(Math.max(eventStart.getTime(), dayStart.getTime()));
+                const actualEnd = new Date(Math.min(eventEnd.getTime(), dayEnd.getTime()));
+                
+                // Calculate percentages
+                const dayStartMinutes = actualStart.getHours() * 60 + actualStart.getMinutes();
+                const dayEndMinutes = actualEnd.getHours() * 60 + actualEnd.getMinutes();
+                const totalDayMinutes = 24 * 60;
+                
+                const startPercent = (dayStartMinutes / totalDayMinutes) * 100;
+                const widthPercent = ((dayEndMinutes - dayStartMinutes) / totalDayMinutes) * 100;
+                
+                // Position and size the overlay
+                overlay.style.left = `${startPercent}%`;
+                overlay.style.width = `${Math.max(widthPercent, 8)}%`; // Minimum 8% width for visibility
+                overlay.style.top = '2px';
+                overlay.style.height = 'calc(100% - 4px)';
+                
+                // Add content
+                const duration = (actualEnd - actualStart) / (1000 * 60 * 60);
+                const timeStr = actualStart.toLocaleTimeString('en-US', { 
+                    hour: 'numeric', 
+                    minute: '2-digit', 
+                    hour12: true 
+                });
+                
+                overlay.innerHTML = `
+                    <span class="overlay-title">${event.title}</span>
+                    <span class="overlay-time">${timeStr} (${duration.toFixed(1)}h)</span>
+                `;
+                
+                // Add tooltip
+                overlay.title = `${event.title}\n${timeStr} - ${actualEnd.toLocaleTimeString('en-US', { 
+                    hour: 'numeric', 
+                    minute: '2-digit', 
+                    hour12: true 
+                })}\nDuration: ${duration.toFixed(1)} hours`;
+                
+                dayEl.appendChild(overlay);
             }
 
             async loadServerEvents() {
