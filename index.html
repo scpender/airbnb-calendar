@@ -687,18 +687,13 @@
                     return false;
                 }
                 
-                // Exclude generic "reserved" without guest info
-                if (/^reserved$/i.test(lowerTitle)) {
-                    return false;
-                }
-                
-                // Only mark as grey if it clearly indicates an actual guest booking
+                // Check for booking indicators
                 const hasGuestCount = /\d+\s*(guest|guests|person|people)/i.test(title);
                 const hasGuestName = /^[A-Z][a-z]+(\s+[A-Z][a-z]*)+$/i.test(title.trim()); // Looks like "John Smith"
-                const hasConfirmedReservation = /(confirmed\s+reservation|guest\s+reservation)/i.test(title);
+                const hasReservationTerms = /(reserved|reservation|confirmed|booked)/i.test(title);
                 
-                // Only turn grey for clear bookings with actual guest information
-                return hasGuestCount || hasGuestName || hasConfirmedReservation;
+                // Mark as booking if it has guest info or reservation terms
+                return hasGuestCount || hasGuestName || hasReservationTerms;
             }
             
             createDayOverlay(dayEl, event, dayDate, eventStart, eventEnd) {
