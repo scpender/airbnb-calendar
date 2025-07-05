@@ -80,6 +80,91 @@
             margin-bottom: 20px;
             font-size: 14px;
         }
+        
+        /* Custom styles for proportional event display */
+        .fc-event {
+            border-radius: 3px;
+            border: none !important;
+            margin: 1px 0;
+        }
+        
+        .fc-event.partial-day {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .fc-event.partial-day::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            background: rgba(255, 255, 255, 0.3);
+            pointer-events: none;
+        }
+        
+        .fc-event.airbnb-source {
+            background-color: #FF5A5F !important;
+            border-color: #FF5A5F !important;
+        }
+        
+        .fc-event.direct-source {
+            background-color: #4285f4 !important;
+            border-color: #4285f4 !important;
+        }
+        
+        .fc-daygrid-event {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        
+        .fc-daygrid-event-harness {
+            margin-top: 1px;
+            margin-bottom: 1px;
+        }
+        
+        /* Proportional event styling */
+        .fc-daygrid-event.partial-day {
+            min-width: 10%;
+            max-width: 100%;
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+        
+        .fc-daygrid-event.partial-day::after {
+            content: '';
+            position: absolute;
+            right: -2px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 0 3px 3px 0;
+        }
+        
+        .fc-event-time {
+            font-size: 9px;
+            opacity: 0.7;
+            font-weight: normal;
+            white-space: nowrap;
+        }
+        
+        .fc-daygrid-day {
+            position: relative;
+        }
+        
+        .fc-daygrid-day-events {
+            margin-top: 2px;
+        }
+        
+        /* Better spacing for partial events */
+        .fc-daygrid-event-harness.partial-day {
+            display: flex;
+            justify-content: flex-start;
+            align-items: stretch;
+        }
     </style>
 </head>
 <body>
@@ -225,6 +310,8 @@
                         events: events,
                         eventDisplay: 'block',
                         eventDidMount: this.customizeEvent.bind(this),
+                        dayMaxEvents: false,
+                        moreLinkClick: 'popover',
                         headerToolbar: {
                             left: 'prev,next today',
                             center: 'title',
@@ -234,7 +321,9 @@
                             hour: 'numeric',
                             minute: '2-digit',
                             omitZeroMinute: false
-                        }
+                        },
+                        dayCellContent: this.customizeDayCell.bind(this),
+                        eventContent: this.customizeEventContent.bind(this)
                     });
 
                     calendar.render();
@@ -367,6 +456,7 @@
                     
                     // For multi-day events, adjust times to show as partial days
                     // Start at 3pm (15:00) and end at 11am (11:00) next day
+                    let isPartialDay = false;
                     if (event.startDate.isDate && this.isMultiDayEvent(startDate, endDate)) {
                         // Set start time to 3pm on start date
                         startDate = new Date(startDate);
@@ -375,6 +465,14 @@
                         // Set end time to 11am on end date
                         endDate = new Date(endDate);
                         endDate.setHours(11, 0, 0, 0);
+                        isPartialDay = true;
+                    } else if (event.startDate.isDate) {
+                        // Single day all-day events also get partial treatment
+                        startDate = new Date(startDate);
+                        startDate.setHours(15, 0, 0, 0);
+                        endDate = new Date(startDate);
+                        endDate.setHours(23, 59, 59, 999); // End of same day
+                        isPartialDay = true;
                     }
                     
                     const calendarEvent = {
@@ -385,13 +483,20 @@
                         allDay: false, // Always show as timed events to display partial days
                         source: source,
                         description: event.description || '',
-                        location: event.location || ''
+                        location: event.location || '',
+                        extendedProps: {
+                            source: source,
+                            isPartialDay: isPartialDay,
+                            fillPercentage: this.calculateFillPercentage(startDate, endDate)
+                        }
                     };
 
                     // Handle multi-day events display
                     if (this.isMultiDayEvent(startDate, endDate)) {
                         calendarEvent.display = 'block';
-                        calendarEvent.className = 'multi-day-event';
+                        calendarEvent.className = 'multi-day-event partial-day';
+                    } else if (isPartialDay) {
+                        calendarEvent.className = 'partial-day';
                     }
 
                     events.push(calendarEvent);
@@ -418,29 +523,93 @@
                 return endDay > startDay;
             }
 
+            calculateFillPercentage(startDate, endDate) {
+                const start = new Date(startDate);
+                const end = new Date(endDate);
+                
+                // If it's the same day, calculate percentage of day
+                if (start.toDateString() === end.toDateString()) {
+                    const startMinutes = start.getHours() * 60 + start.getMinutes();
+                    const endMinutes = end.getHours() * 60 + end.getMinutes();
+                    const totalMinutes = 24 * 60;
+                    
+                    const duration = endMinutes - startMinutes;
+                    return Math.min(100, Math.max(10, (duration / totalMinutes) * 100));
+                }
+                
+                // For multi-day events, return 100% for middle days
+                return 100;
+            }
+
             customizeEvent(info) {
                 const event = info.event;
                 const el = info.el;
                 
-                // Add source indicator
-                const sourceIndicator = document.createElement('div');
-                sourceIndicator.className = 'event-source';
-                sourceIndicator.textContent = event.extendedProps.source;
-                sourceIndicator.style.cssText = `
-                    font-size: 10px;
-                    opacity: 0.7;
-                    margin-top: 2px;
-                `;
-                el.appendChild(sourceIndicator);
+                // Add proportional fill for partial day events
+                if (event.extendedProps.isPartialDay) {
+                    const fillPercentage = event.extendedProps.fillPercentage;
+                    el.style.width = `${fillPercentage}%`;
+                    el.style.marginLeft = '0';
+                    el.style.marginRight = 'auto';
+                    
+                    // Add visual indicator for partial fill
+                    if (fillPercentage < 100) {
+                        el.style.background = `linear-gradient(to right, 
+                            ${event.extendedProps.source === 'Airbnb' ? '#FF5A5F' : '#4285f4'} 0%, 
+                            ${event.extendedProps.source === 'Airbnb' ? '#FF5A5F' : '#4285f4'} 100%, 
+                            transparent 100%)`;
+                        el.style.borderRight = '2px dashed rgba(0,0,0,0.3)';
+                    }
+                }
 
                 // Style based on source
-                if (event.extendedProps.source === 'Airbnb') {
-                    el.style.backgroundColor = '#FF5A5F';
-                    el.style.borderColor = '#FF5A5F';
-                } else {
-                    el.style.backgroundColor = '#4285f4';
-                    el.style.borderColor = '#4285f4';
+                el.classList.add(event.extendedProps.source === 'Airbnb' ? 'airbnb-source' : 'direct-source');
+                
+                // Add time indicator for partial days
+                if (event.extendedProps.isPartialDay) {
+                    const timeSpan = document.createElement('span');
+                    timeSpan.className = 'event-time';
+                    timeSpan.textContent = event.start.toLocaleTimeString('en-US', {
+                        hour: 'numeric',
+                        minute: '2-digit',
+                        hour12: true
+                    });
+                    timeSpan.style.cssText = `
+                        font-size: 10px;
+                        opacity: 0.8;
+                        font-weight: normal;
+                        margin-left: 4px;
+                    `;
+                    
+                    const titleEl = el.querySelector('.fc-event-title');
+                    if (titleEl) {
+                        titleEl.appendChild(timeSpan);
+                    }
                 }
+            }
+
+            customizeDayCell(info) {
+                // Default day cell content
+                return { html: info.dayNumberText };
+            }
+
+            customizeEventContent(info) {
+                const event = info.event;
+                let html = `<div class="fc-event-main">`;
+                
+                if (event.extendedProps.isPartialDay) {
+                    const duration = (event.end - event.start) / (1000 * 60 * 60); // hours
+                    html += `<div class="fc-event-title">${event.title}</div>`;
+                    html += `<div class="fc-event-time" style="font-size: 10px; opacity: 0.8;">
+                        ${event.start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}
+                        (${duration.toFixed(1)}h)
+                    </div>`;
+                } else {
+                    html += `<div class="fc-event-title">${event.title}</div>`;
+                }
+                
+                html += `</div>`;
+                return { html: html };
             }
 
             async loadServerEvents() {
