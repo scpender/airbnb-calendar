@@ -164,6 +164,12 @@
             border-left: 3px solid #2c5aa0;
         }
         
+        .partial-day-overlay.not-available {
+            background: linear-gradient(135deg, #999 0%, #777 100%) !important;
+            border-left: 3px solid #666 !important;
+            color: white !important;
+        }
+        
         .partial-day-overlay::after {
             content: '';
             position: absolute;
@@ -690,7 +696,16 @@
             
             createDayOverlay(dayEl, event, dayDate, eventStart, eventEnd) {
                 const overlay = document.createElement('div');
-                overlay.className = `partial-day-overlay ${event.extendedProps.source.toLowerCase()}-source`;
+                const isNotAvailable = this.isBookingEvent(event.title);
+                
+                // Set base classes
+                let overlayClasses = 'partial-day-overlay';
+                if (isNotAvailable) {
+                    overlayClasses += ' not-available';
+                } else {
+                    overlayClasses += ` ${event.extendedProps.source.toLowerCase()}-source`;
+                }
+                overlay.className = overlayClasses;
                 
                 // Calculate positioning and width for this specific day
                 const dayStart = new Date(dayDate);
@@ -716,22 +731,21 @@
                 overlay.style.top = '2px';
                 overlay.style.height = 'calc(100% - 4px)';
                 
-                // Add content
+                // Clean event title - remove times and guest info
+                const cleanTitle = this.cleanEventTitle(event.title);
+                
+                // Add content - NO TIMES shown on the tile
+                overlay.innerHTML = `
+                    <span class="overlay-title">${cleanTitle}</span>
+                `;
+                
+                // Add tooltip with detailed info (times only in tooltip)
                 const duration = (actualEnd - actualStart) / (1000 * 60 * 60);
                 const timeStr = actualStart.toLocaleTimeString('en-US', { 
                     hour: 'numeric', 
                     minute: '2-digit', 
                     hour12: true 
                 });
-                
-                // Clean event title - remove times and guest info
-                const cleanTitle = this.cleanEventTitle(event.title);
-                
-                overlay.innerHTML = `
-                    <span class="overlay-title">${cleanTitle}</span>
-                `;
-                
-                // Add tooltip with detailed info
                 const endTimeStr = actualEnd.toLocaleTimeString('en-US', { 
                     hour: 'numeric', 
                     minute: '2-digit', 
