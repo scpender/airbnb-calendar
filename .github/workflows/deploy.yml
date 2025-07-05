@@ -12,24 +12,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
-    - name: Create config from secrets
+    - name: Create config from secret
       run: |
-        cat > airbnb-config.json << EOF
-        {
-          "properties": [
-            {
-              "name": "${{ secrets.PROPERTY_1_NAME }}",
-              "directUrl": "${{ secrets.PROPERTY_1_DIRECT_URL }}",
-              "airbnbUrl": "${{ secrets.PROPERTY_1_AIRBNB_URL }}"
-            },
-            {
-              "name": "${{ secrets.PROPERTY_2_NAME }}",
-              "directUrl": "${{ secrets.PROPERTY_2_DIRECT_URL }}",
-              "airbnbUrl": "${{ secrets.PROPERTY_2_AIRBNB_URL }}"
-            }
-          ]
-        }
-        EOF
+        echo '${{ secrets.AIRBNB_CONFIG }}' > airbnb-config.json
     
     - name: Deploy to GitHub Pages
       uses: peaceiris/actions-gh-pages@v3
