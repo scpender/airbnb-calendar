@@ -1,0 +1,39 @@
+name: Deploy Calendar with Secrets
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Create config from secrets
+      run: |
+        cat > airbnb-config.json << EOF
+        {
+          "properties": [
+            {
+              "name": "${{ secrets.PROPERTY_1_NAME }}",
+              "directUrl": "${{ secrets.PROPERTY_1_DIRECT_URL }}",
+              "airbnbUrl": "${{ secrets.PROPERTY_1_AIRBNB_URL }}"
+            },
+            {
+              "name": "${{ secrets.PROPERTY_2_NAME }}",
+              "directUrl": "${{ secrets.PROPERTY_2_DIRECT_URL }}",
+              "airbnbUrl": "${{ secrets.PROPERTY_2_AIRBNB_URL }}"
+            }
+          ]
+        }
+        EOF
+    
+    - name: Deploy to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./
+        exclude_assets: '.github,README.md'
