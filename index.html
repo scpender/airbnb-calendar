@@ -99,7 +99,17 @@
                 this.calendars = {};
                 this.localEvents = this.loadLocalEvents();
                 this.currentProperty = null;
+                
+                // Clear localStorage on fresh load to remove duplicates
+                this.clearDuplicatesFromStorage();
+                
                 this.init();
+            }
+
+            clearDuplicatesFromStorage() {
+                console.log('Clearing duplicate events from storage...');
+                localStorage.removeItem('airbnb-calendar-events');
+                this.localEvents = {};
             }
 
             async init() {
@@ -249,19 +259,44 @@
                     }
                 }
 
-                // Merge with locally stored events
+                // Merge with locally stored events (only past events)
                 const localEvents = this.localEvents[property.name] || [];
-                allEvents.push(...localEvents);
+                const pastLocalEvents = localEvents.filter(event => {
+                    const eventDate = new Date(event.start);
+                    return eventDate < new Date();
+                });
+                allEvents.push(...pastLocalEvents);
+
+                // Remove duplicates from the combined events
+                const uniqueEvents = this.removeDuplicateEvents(allEvents);
 
                 // Show message if no events are found
-                if (allEvents.length === 0) {
+                if (uniqueEvents.length === 0) {
                     console.log('No events found for this property');
                 }
 
                 // Update local storage with new events
-                this.updateLocalEvents(property.name, allEvents);
+                this.updateLocalEvents(property.name, uniqueEvents);
 
-                return allEvents;
+                return uniqueEvents;
+            }
+
+            removeDuplicateEvents(events) {
+                const uniqueEvents = [];
+                const seenIds = new Set();
+                const seenTitles = new Map(); // Track by title and date to catch duplicates with different IDs
+                
+                events.forEach(event => {
+                    const titleDateKey = `${event.title}_${event.start}_${event.end}`;
+                    
+                    if (!seenIds.has(event.id) && !seenTitles.has(titleDateKey)) {
+                        uniqueEvents.push(event);
+                        seenIds.add(event.id);
+                        seenTitles.set(titleDateKey, true);
+                    }
+                });
+                
+                return uniqueEvents;
             }
 
             async fetchICalEvents(url, source) {
