@@ -680,18 +680,14 @@
             }
             
             isBookingEvent(title, source) {
-                // For Airbnb events, most are actual bookings so default to grey
-                // unless they're clearly just blocked time
-                if (source === 'Airbnb') {
-                    const isBlockedTime = /^(not\s*available|blocked|unavailable|maintenance|cleaning)$/i.test(title.trim());
-                    return !isBlockedTime; // Grey unless it's blocked time
-                }
-                
-                // For direct calendar events, only grey if clearly a booking
+                // Only mark as grey if it clearly indicates an actual guest booking
+                // regardless of source
                 const hasGuestCount = /\d+\s*(guest|guests|person|people)/i.test(title);
-                const hasReservationTerms = /(reservation|booked|confirmed)/i.test(title);
+                const hasGuestName = /^[A-Z][a-z]+(\s+[A-Z][a-z]*)+$/i.test(title.trim()); // Looks like "John Smith"
+                const hasReservationTerms = /(reservation|confirmed|booking)/i.test(title);
                 
-                return hasGuestCount || hasReservationTerms;
+                // Only turn grey for clear bookings
+                return hasGuestCount || hasGuestName || hasReservationTerms;
             }
             
             createDayOverlay(dayEl, event, dayDate, eventStart, eventEnd) {
