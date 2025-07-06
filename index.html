@@ -212,6 +212,17 @@
             transform: translateY(-1px);
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
             transition: all 0.2s ease;
+            z-index: 10;
+        }
+        
+        /* Stacked event improvements */
+        .partial-day-overlay {
+            border-bottom: 1px solid rgba(255,255,255,0.3);
+            box-sizing: border-box;
+        }
+        
+        .partial-day-overlay:last-child {
+            border-bottom: none;
         }
         
         /* Not available day styling */
@@ -627,6 +638,9 @@
                 const calendar = this.calendars[this.currentProperty];
                 if (!calendar) return;
                 
+                // Group events by day for proper stacking
+                const eventsByDay = new Map();
+                
                 events.forEach(event => {
                     console.log(`Checking event for overlay: "${event.title}" - isPartialDay: ${event.extendedProps?.isPartialDay}`);
                     if (!event.extendedProps || !event.extendedProps.isPartialDay) {
@@ -643,19 +657,44 @@
                     
                     while (currentDay <= eventEnd) {
                         const dayStr = currentDay.toISOString().split('T')[0];
-                        const dayEl = calendar.el.querySelector(`[data-date="${dayStr}"]`);
                         
-                        if (dayEl) {
-                            // Mark day as not available if it's NOT a booking (blocked time)
-                            if (!this.isBookingEvent(event.title, event.extendedProps.source)) {
-                                dayEl.classList.add('not-available');
-                            }
-                            
-                            this.createDayOverlay(dayEl, event, new Date(currentDay), eventStart, eventEnd);
+                        if (!eventsByDay.has(dayStr)) {
+                            eventsByDay.set(dayStr, []);
                         }
+                        
+                        eventsByDay.get(dayStr).push({
+                            event,
+                            dayDate: new Date(currentDay),
+                            eventStart,
+                            eventEnd
+                        });
                         
                         currentDay.setDate(currentDay.getDate() + 1);
                     }
+                });
+                
+                // Create overlays for each day, handling multiple events
+                eventsByDay.forEach((dayEvents, dayStr) => {
+                    const dayEl = calendar.el.querySelector(`[data-date="${dayStr}"]`);
+                    if (!dayEl) return;
+                    
+                    // Sort events by source priority (Airbnb first, then Direct)
+                    dayEvents.sort((a, b) => {
+                        const sourceOrder = { 'Airbnb': 0, 'Direct': 1 };
+                        return sourceOrder[a.event.extendedProps.source] - sourceOrder[b.event.extendedProps.source];
+                    });
+                    
+                    // Create overlays with proper vertical stacking
+                    dayEvents.forEach((eventData, index) => {
+                        const { event, dayDate, eventStart, eventEnd } = eventData;
+                        
+                        // Mark day as not available if any event is blocked time
+                        if (!this.isBookingEvent(event.title, event.extendedProps.source)) {
+                            dayEl.classList.add('not-available');
+                        }
+                        
+                        this.createDayOverlay(dayEl, event, dayDate, eventStart, eventEnd, index, dayEvents.length);
+                    });
                 });
             }
             
@@ -696,7 +735,7 @@
                 return hasGuestCount || hasGuestName || hasReservationTerms;
             }
             
-            createDayOverlay(dayEl, event, dayDate, eventStart, eventEnd) {
+            createDayOverlay(dayEl, event, dayDate, eventStart, eventEnd, stackIndex = 0, totalEvents = 1) {
                 const overlay = document.createElement('div');
                 const isBooking = this.isBookingEvent(event.title, event.extendedProps.source);
                 const source = event.extendedProps.source;
@@ -739,11 +778,15 @@
                 const startPercent = (dayStartMinutes / totalDayMinutes) * 100;
                 const widthPercent = ((dayEndMinutes - dayStartMinutes) / totalDayMinutes) * 100;
                 
+                // Calculate stacking for multiple events
+                const eventHeight = totalEvents > 1 ? `calc((100% - 4px) / ${totalEvents})` : 'calc(100% - 4px)';
+                const eventTop = totalEvents > 1 ? `calc(2px + ((100% - 4px) / ${totalEvents}) * ${stackIndex})` : '2px';
+                
                 // Position and size the overlay
                 overlay.style.left = `${startPercent}%`;
                 overlay.style.width = `${Math.max(widthPercent, 8)}%`; // Minimum 8% width for visibility
-                overlay.style.top = '2px';
-                overlay.style.height = 'calc(100% - 4px)';
+                overlay.style.top = eventTop;
+                overlay.style.height = eventHeight;
                 
                 // Clean event title - remove times and guest info
                 const cleanTitle = this.cleanEventTitle(event.title);
