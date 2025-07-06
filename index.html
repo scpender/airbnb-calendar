@@ -501,8 +501,11 @@
                     const event = new ICAL.Event(vevent);
                     const summary = event.summary;
                     
+                    console.log(`Processing ${source} event: "${summary}"`);
+                    
                     // Filter out partial phone numbers
                     if (this.containsPartialPhoneNumber(summary)) {
+                        console.log(`Filtered out phone number event: "${summary}"`);
                         return;
                     }
 
@@ -554,6 +557,7 @@
                         calendarEvent.className = 'partial-day';
                     }
 
+                    console.log(`Added ${source} event: "${summary}" from ${startDate} to ${endDate}`);
                     events.push(calendarEvent);
                 });
 
@@ -598,6 +602,8 @@
 
 
             addProportionalOverlays(events) {
+                console.log(`Adding overlays for ${events.length} events`);
+                
                 // Clear existing overlays and styling
                 document.querySelectorAll('.partial-day-overlay').forEach(el => el.remove());
                 document.querySelectorAll('.fc-daygrid-day.not-available').forEach(el => {
