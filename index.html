@@ -394,25 +394,33 @@
             }
 
             async fetchAndMergeEvents(property) {
+                console.log('=== Fetching events for property:', property.name);
+                console.log('Direct URL:', property.directUrl);
+                console.log('Airbnb URL:', property.airbnbUrl);
+                
                 const allEvents = [];
                 const sources = [];
                 
                 // Only add sources that have URLs
                 if (property.directUrl && property.directUrl.trim() !== '') {
+                    console.log('Adding Direct source');
                     sources.push({ url: property.directUrl, source: 'Direct' });
                 }
                 if (property.airbnbUrl && property.airbnbUrl.trim() !== '') {
+                    console.log('Adding Airbnb source');
                     sources.push({ url: property.airbnbUrl, source: 'Airbnb' });
                 }
+                
+                console.log(`Total sources to fetch: ${sources.length}`);
 
                 for (const source of sources) {
                     try {
-                        console.log(`Fetching ${source.source} events from:`, source.url);
+                        console.log(`=== Fetching ${source.source} events from:`, source.url);
                         const events = await this.fetchICalEvents(source.url, source.source);
-                        console.log(`Found ${events.length} events from ${source.source}`);
+                        console.log(`=== Found ${events.length} events from ${source.source}`);
                         allEvents.push(...events);
                     } catch (error) {
-                        console.error(`Failed to fetch ${source.source} events:`, error);
+                        console.error(`=== Failed to fetch ${source.source} events:`, error);
                         this.showStatus(`Warning: Could not load ${source.source} events - ${error.message}`);
                     }
                 }
