@@ -447,10 +447,13 @@
             }
 
             async fetchICalEvents(url, source) {
-                // Try different CORS proxy services
+                console.log(`Starting fetch for ${source} from URL:`, url);
+                
+                // Try different CORS proxy services, with Google Calendar optimized proxies
                 const proxyUrls = [
                     `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
                     `https://corsproxy.io/?${encodeURIComponent(url)}`,
+                    `https://cors.bridged.cc/${url}`,
                     `https://cors-anywhere.herokuapp.com/${url}`
                 ];
                 
@@ -458,6 +461,7 @@
                 
                 for (const proxyUrl of proxyUrls) {
                     try {
+                        console.log(`Trying proxy for ${source}:`, proxyUrl);
                         const response = await fetch(proxyUrl);
                         
                         if (!response.ok) {
@@ -472,10 +476,13 @@
                             icalData = await response.text();
                         }
                         
-                        return this.parseICalEvents(icalData, source);
+                        console.log(`Successfully fetched ${source} data, length:`, icalData.length);
+                        const events = this.parseICalEvents(icalData, source);
+                        console.log(`Parsed ${events.length} events from ${source}`);
+                        return events;
                     } catch (error) {
                         lastError = error;
-                        console.warn(`Failed to fetch from proxy: ${proxyUrl}`, error);
+                        console.warn(`Failed to fetch ${source} from proxy: ${proxyUrl}`, error);
                         continue;
                     }
                 }
