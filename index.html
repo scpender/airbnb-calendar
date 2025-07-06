@@ -515,6 +515,9 @@
                     // For multi-day events, adjust times to show as partial days
                     // Start at 3pm (15:00) and end at 11am (11:00) next day
                     let isPartialDay = false;
+                    
+                    console.log(`Event "${summary}" - isDate: ${event.startDate.isDate}, isMultiDay: ${this.isMultiDayEvent(startDate, endDate)}`);
+                    
                     if (event.startDate.isDate && this.isMultiDayEvent(startDate, endDate)) {
                         // Set start time to 3pm on start date
                         startDate = new Date(startDate);
@@ -530,6 +533,9 @@
                         startDate.setHours(15, 0, 0, 0);
                         endDate = new Date(startDate);
                         endDate.setHours(23, 59, 59, 999); // End of same day
+                        isPartialDay = true;
+                    } else {
+                        // For timed events, still treat as partial day for overlay display
                         isPartialDay = true;
                     }
                     
@@ -614,7 +620,11 @@
                 if (!calendar) return;
                 
                 events.forEach(event => {
-                    if (!event.extendedProps || !event.extendedProps.isPartialDay) return;
+                    console.log(`Checking event for overlay: "${event.title}" - isPartialDay: ${event.extendedProps?.isPartialDay}`);
+                    if (!event.extendedProps || !event.extendedProps.isPartialDay) {
+                        console.log(`Skipping event "${event.title}" - no isPartialDay property`);
+                        return;
+                    }
                     
                     const eventStart = new Date(event.start);
                     const eventEnd = new Date(event.end);
